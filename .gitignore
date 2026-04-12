@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# QR preview output folder
+qr_preview/
+
+# Excel temp files
+*.xlsx
+
+# OS junk
+.DS_Store
+Thumbs.db
