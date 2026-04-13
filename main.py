@@ -8,12 +8,18 @@ SETUP:
   1. uv add resend qrcode pillow openpyxl python-dotenv
      OR: pip install resend qrcode[pil] openpyxl pillow python-dotenv
   2. Fill in your .env file
-  3. python send_qr_emails.py
+  3. python main.py
+
+To resend a ticket to just one student:
+  python main.py resend 123
+  python main.py resend "Jana Nováková"
+  python main.py resend jana@example.com
 """
 
 import io
 import base64
 import os
+import sys
 import time
 import openpyxl
 import qrcode
@@ -47,7 +53,7 @@ SEND_DELAY_SECONDS = 1.5
 
 # "preview" = save QR images + print to console, no emails sent
 # "real"    = actually send emails
-MODE = "real"
+MODE = "preview"
 
 # ================================================================
 
@@ -127,6 +133,111 @@ def load_students(path):
     return students
 
 
+def _send_one_email(s, template, index=None, total=None):
+    """
+    Build and send a single ticket email.
+    Returns True on success, False on failure.
+    """
+    qr_bytes = make_qr_bytes(s["name"], s["class_"], s["id"])
+    qr_b64   = base64.b64encode(qr_bytes).decode()
+    qr_cid   = f"qr_{s['id']}@tickets.rozlucka.me"
+
+    html = template.format(
+        name=s["name"],
+        class_=s["class_"],
+        id_=s["id"],
+        qr_cid=qr_cid,
+        EVENT_NAME=EVENT_NAME,
+        EVENT_DATE=EVENT_DATE,
+        EVENT_TIME=EVENT_TIME,
+        EVENT_LOCATION=EVENT_LOCATION,
+        SENDER_EMAIL=SENDER_EMAIL,
+    )
+    plain   = make_plain_text(s["name"], s["class_"], s["id"])
+    subject = f"Tvoj lístok na {EVENT_NAME} – {s['name']}"
+    prefix  = f"[{index}/{total}] " if index and total else ""
+
+    try:
+        resend.Emails.send({
+            "from": f"{SENDER_NAME} <{SENDER_EMAIL}>",
+            "to": [s["email"]],
+            "subject": subject,
+            "html": html,
+            "text": plain,
+            "attachments": [
+                {
+                    "filename": f"listok_{s['name'].replace(' ', '_')}.png",
+                    "content": qr_b64,
+                    "content_type": "image/png",
+                    "inline": True,
+                    "content_id": qr_cid,
+                }
+            ],
+        })
+        print(f"  {prefix}✓ Sent to {s['name']} <{s['email']}>")
+        return True
+
+    except Exception as e:
+        print(f"  {prefix}✗ Failed for {s['name']}: {e}")
+        return False
+
+
+def resend_one(identifier: str):
+    """
+    Resend the ticket email to exactly one client.
+
+    Searches by ID, full name, or email — case-insensitive.
+    Always shows the matched client info and asks for confirmation.
+    Respects MODE — won't send real emails in preview mode.
+
+    Usage:
+        python main.py resend 123
+        python main.py resend "Jana Nováková"
+        python main.py resend jana@example.com
+    """
+    if MODE == "preview":
+        print("  ⚠  MODE is set to 'preview' — no emails will be sent.")
+        print("     Change MODE to 'real' in the script to send for real.")
+        return
+
+    check_env()
+    resend.api_key = RESEND_API_KEY
+    template = load_template()
+    students = load_students(EXCEL_FILE)
+
+    needle = identifier.strip().lower()
+    matches = [
+        s for s in students
+        if needle in (s["id"].lower(),
+                      s["name"].lower(),
+                      s["email"].lower())
+    ]
+
+    if not matches:
+        print(f"  ✗ No student found matching '{identifier}'")
+        print("    Searched by: ID, name, and email (case-insensitive)")
+        return
+
+    if len(matches) > 1:
+        print(f"  ⚠  Multiple matches for '{identifier}':\n")
+
+    for m in matches:
+        print(f"  Name:   {m['name']}")
+        print(f"  Class:  {m['class_']}")
+        print(f"  ID:     {m['id']}")
+        print(f"  Email:  {m['email']}")
+        print()
+
+    label = "all of the above" if len(matches) > 1 else "this student"
+    confirm = input(f"  Resend ticket to {label}? Type YES to confirm: ")
+    if confirm.strip().upper() != "YES":
+        print("  Cancelled.")
+        return
+
+    for s in matches:
+        _send_one_email(s, template)
+
+
 def preview_mode(students, template):
     os.makedirs("qr_preview", exist_ok=True)
     print("\n── PREVIEW MODE — no emails sent ──\n")
@@ -136,7 +247,6 @@ def preview_mode(students, template):
         with open(fname, "wb") as f:
             f.write(qr_bytes)
 
-        # Also save a rendered HTML preview so you can open it in a browser
         qr_cid = f"qr_{s['id']}@tickets.rozlucka.me"
         html_preview = template.format(
             name=s["name"],
@@ -169,50 +279,14 @@ def send_mode(students, template):
     failed = 0
 
     for i, s in enumerate(students, 1):
-        qr_bytes = make_qr_bytes(s["name"], s["class_"], s["id"])
-        qr_b64 = base64.b64encode(qr_bytes).decode()
-        qr_cid = f"qr_{s['id']}@tickets.rozlucka.me"
-
-        html = template.format(
-            name=s["name"],
-            class_=s["class_"],
-            id_=s["id"],
-            qr_cid=qr_cid,
-            EVENT_NAME=EVENT_NAME,
-            EVENT_DATE=EVENT_DATE,
-            EVENT_TIME=EVENT_TIME,
-            EVENT_LOCATION=EVENT_LOCATION,
-            SENDER_EMAIL=SENDER_EMAIL,
-        )
-        plain = make_plain_text(s["name"], s["class_"], s["id"])
-        subject = f"Tvoj lístok na {EVENT_NAME} – {s['name']}"
-
-        try:
-            resend.Emails.send({
-                "from": f"{SENDER_NAME} <{SENDER_EMAIL}>",
-                "to": [s["email"]],
-                "subject": subject,
-                "html": html,
-                "text": plain,
-                "attachments": [
-                    {
-                        "filename": f"listok_{s['name'].replace(' ', '_')}.png",
-                        "content": qr_b64,
-                        "content_type": "image/png",
-                        "inline": True,
-                        "content_id": qr_cid,
-                    }
-                ],
-            })
-            print(f"  [{i}/{len(students)}] ✓ Sent to {s['name']} <{s['email']}>")
+        ok = _send_one_email(s, template, index=i, total=len(students))
+        if ok:
             sent += 1
-
-            if i < len(students):
-                time.sleep(SEND_DELAY_SECONDS)
-
-        except Exception as e:
-            print(f"  [{i}/{len(students)}] ✗ Failed for {s['name']}: {e}")
+        else:
             failed += 1
+
+        if i < len(students):
+            time.sleep(SEND_DELAY_SECONDS)
 
     print(f"\n── Done: {sent} sent, {failed} failed ──\n")
 
@@ -230,6 +304,12 @@ def check_env():
 
 
 def main():
+    # Handle: python main.py resend <identifier>
+    if len(sys.argv) >= 3 and sys.argv[1].lower() == "resend":
+        identifier = " ".join(sys.argv[2:])
+        resend_one(identifier)
+        return
+
     check_env()
 
     print(f"Loading template from {TEMPLATE_FILE} …")
