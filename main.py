@@ -10,7 +10,17 @@ SETUP:
   2. Fill in your .env file
   3. python main.py
 
-To resend a ticket to just one student:
+Column layout in students_database.xlsx:
+  A — Name
+  B — Class
+  C — ID
+  D — Email
+  E — Sent (1 = email sent, 0 or empty = not sent yet)
+
+Main send run skips anyone already marked 1 in column E.
+After a successful send, column E is updated to 1.
+
+To resend to one student regardless of their sent status:
   python main.py resend 123
   python main.py resend "Jana Nováková"
   python main.py resend jana@example.com
@@ -39,6 +49,8 @@ COL_NAME           = 1   # A
 COL_CLASS          = 2   # B
 COL_ID             = 3   # C
 COL_EMAIL          = 4   # D
+COL_SENT           = 5   # E  — 1 = sent, 0/empty = not sent
+
 HEADER_ROW         = 1
 
 RESEND_API_KEY     = os.getenv("RESEND_API_KEY")
@@ -53,13 +65,12 @@ SEND_DELAY_SECONDS = 1.5
 
 # "preview" = save QR images + print to console, no emails sent
 # "real"    = actually send emails
-MODE = "preview"
+MODE = "real"
 
 # ================================================================
 
 
 def load_template():
-    """Load the HTML template from file."""
     if not os.path.exists(TEMPLATE_FILE):
         raise FileNotFoundError(
             f"Template file '{TEMPLATE_FILE}' not found. "
@@ -70,7 +81,6 @@ def load_template():
 
 
 def make_qr_bytes(name, class_, id_):
-    """Generate a QR code PNG containing name|class|id."""
     text = f"{name} | {class_} | {id_}"
     qr = qrcode.QRCode(
         version=None,
@@ -87,7 +97,6 @@ def make_qr_bytes(name, class_, id_):
 
 
 def make_plain_text(name, class_, id_):
-    """Plain text fallback — important for spam score, always include this."""
     return f"""Ahoj {name},
 
 Tvoj vstupný lístok na {EVENT_NAME} je pripravený.
@@ -110,33 +119,68 @@ Odosielateľ: {SENDER_EMAIL}
 """
 
 
-def load_students(path):
-    wb = openpyxl.load_workbook(path, data_only=True)
+def load_students(path, unsent_only=False):
+    """
+    Load students from Excel.
+    Returns a list of dicts, each with a 'row_number' key for writing back.
+    If unsent_only=True, skips anyone with COL_SENT == 1.
+    Also ensures the header row has 'Sent' in column E.
+    """
+    wb = openpyxl.load_workbook(path)
     ws = wb.active
+
+    # Make sure column E has a header
+    if ws.cell(row=HEADER_ROW, column=COL_SENT).value is None:
+        ws.cell(row=HEADER_ROW, column=COL_SENT).value = "Sent"
+        wb.save(path)
+
     students = []
-    for row in ws.iter_rows(min_row=HEADER_ROW + 1, values_only=True):
-        name   = row[COL_NAME  - 1]
-        class_ = row[COL_CLASS - 1]
-        id_    = row[COL_ID    - 1]
-        email  = row[COL_EMAIL - 1]
+    for row in ws.iter_rows(min_row=HEADER_ROW + 1):
+        name   = row[COL_NAME  - 1].value
+        class_ = row[COL_CLASS - 1].value
+        id_    = row[COL_ID    - 1].value
+        email  = row[COL_EMAIL - 1].value
+        sent   = row[COL_SENT  - 1].value
+        row_num = row[0].row
+
         if not name and not email:
             continue
         if not email:
             print(f"  ⚠  Skipping {name} — no email address")
             continue
+
+        already_sent = (str(sent).strip() == "1") if sent is not None else False
+
+        if unsent_only and already_sent:
+            continue
+
         students.append({
-            "name":   str(name).strip(),
-            "class_": str(class_).strip(),
-            "id":     str(id_).strip(),
-            "email":  str(email).strip(),
+            "name":         str(name).strip(),
+            "class_":       str(class_).strip(),
+            "id":           str(id_).strip(),
+            "email":        str(email).strip(),
+            "already_sent": already_sent,
+            "row_number":   row_num,
         })
+
+    wb.close()
     return students
+
+
+def mark_sent(path, row_number):
+    """Write 1 into column E for the given row number."""
+    wb = openpyxl.load_workbook(path)
+    ws = wb.active
+    ws.cell(row=row_number, column=COL_SENT).value = 1
+    wb.save(path)
+    wb.close()
 
 
 def _send_one_email(s, template, index=None, total=None):
     """
     Build and send a single ticket email.
     Returns True on success, False on failure.
+    Does NOT update the Excel — caller decides whether to mark_sent.
     """
     qr_bytes = make_qr_bytes(s["name"], s["class_"], s["id"])
     qr_b64   = base64.b64encode(qr_bytes).decode()
@@ -182,28 +226,35 @@ def _send_one_email(s, template, index=None, total=None):
         return False
 
 
+def print_client_info(s):
+    """Print a student's details in a consistent format."""
+    status = "already sent" if s.get("already_sent") else "not sent yet"
+    print(f"  Name:   {s['name']}")
+    print(f"  Class:  {s['class_']}")
+    print(f"  ID:     {s['id']}")
+    print(f"  Email:  {s['email']}")
+    print(f"  Status: {status}")
+    print()
+
+
 def resend_one(identifier: str):
     """
     Resend the ticket email to exactly one client.
 
-    Searches by ID, full name, or email — case-insensitive.
-    Always shows the matched client info and asks for confirmation.
-    Respects MODE — won't send real emails in preview mode.
+    - Searches by ID, full name, or email (case-insensitive).
+    - Always shows client info, even in preview mode.
+    - In preview mode: shows info but does not send.
+    - In real mode: asks for confirmation, then sends regardless of sent status.
+    - Does NOT update the sent column (resend is manual, intentional).
 
     Usage:
         python main.py resend 123
         python main.py resend "Jana Nováková"
         python main.py resend jana@example.com
     """
-    if MODE == "preview":
-        print("  ⚠  MODE is set to 'preview' — no emails will be sent.")
-        print("     Change MODE to 'real' in the script to send for real.")
-        return
-
-    check_env()
-    resend.api_key = RESEND_API_KEY
     template = load_template()
-    students = load_students(EXCEL_FILE)
+    # Load all students (not unsent_only — resend ignores sent status)
+    students = load_students(EXCEL_FILE, unsent_only=False)
 
     needle = identifier.strip().lower()
     matches = [
@@ -222,11 +273,15 @@ def resend_one(identifier: str):
         print(f"  ⚠  Multiple matches for '{identifier}':\n")
 
     for m in matches:
-        print(f"  Name:   {m['name']}")
-        print(f"  Class:  {m['class_']}")
-        print(f"  ID:     {m['id']}")
-        print(f"  Email:  {m['email']}")
-        print()
+        print_client_info(m)
+
+    if MODE == "preview":
+        print("  ⚠  MODE is set to 'preview' — email not sent.")
+        print("     Change MODE to 'real' in the script to send for real.")
+        return
+
+    check_env()
+    resend.api_key = RESEND_API_KEY
 
     label = "all of the above" if len(matches) > 1 else "this student"
     confirm = input(f"  Resend ticket to {label}? Type YES to confirm: ")
@@ -275,24 +330,24 @@ def preview_mode(students, template):
 def send_mode(students, template):
     resend.api_key = RESEND_API_KEY
 
-    sent = 0
+    sent_count = 0
     failed = 0
 
     for i, s in enumerate(students, 1):
         ok = _send_one_email(s, template, index=i, total=len(students))
         if ok:
-            sent += 1
+            mark_sent(EXCEL_FILE, s["row_number"])
+            sent_count += 1
         else:
             failed += 1
 
         if i < len(students):
             time.sleep(SEND_DELAY_SECONDS)
 
-    print(f"\n── Done: {sent} sent, {failed} failed ──\n")
+    print(f"\n── Done: {sent_count} sent, {failed} failed ──\n")
 
 
 def check_env():
-    """Make sure all required .env variables are set."""
     missing = [k for k in [
         "RESEND_API_KEY", "SENDER_EMAIL", "SENDER_NAME",
         "EVENT_NAME", "EVENT_DATE", "EVENT_LOCATION", "EVENT_TIME"
@@ -316,21 +371,29 @@ def main():
     template = load_template()
 
     print(f"Loading {EXCEL_FILE} …")
-    students = load_students(EXCEL_FILE)
-    print(f"  Found {len(students)} students.\n")
-
-    if not students:
-        print("No students found. Check your column settings in CONFIG.")
-        return
 
     if MODE == "preview":
+        # Preview shows all students regardless of sent status
+        students = load_students(EXCEL_FILE, unsent_only=False)
+        print(f"  Found {len(students)} students.\n")
+        if not students:
+            print("No students found. Check your column settings in CONFIG.")
+            return
         preview_mode(students, template)
+
     elif MODE == "real":
-        confirm = input(f"Send {len(students)} real emails? Type YES to confirm: ")
+        # Only load students who haven't been sent to yet
+        students = load_students(EXCEL_FILE, unsent_only=True)
+        print(f"  Found {len(students)} unsent students.\n")
+        if not students:
+            print("  ✓ All students have already been sent an email. Nothing to do.")
+            return
+        confirm = input(f"Send emails to {len(students)} unsent students? Type YES to confirm: ")
         if confirm.strip().upper() == "YES":
             send_mode(students, template)
         else:
             print("Cancelled.")
+
     else:
         print(f"Unknown MODE '{MODE}'. Use 'preview' or 'real'.")
 
