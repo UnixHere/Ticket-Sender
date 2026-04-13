@@ -25,7 +25,10 @@ def generate_ids(path):
     for row in ws.iter_rows(min_row=HEADER_ROW + 1, values_only=True):
         val = row[COL_ID - 1]
         if val is not None:
-            used.add(int(val))
+            try:
+                used.add(int(val))
+            except (ValueError, TypeError):
+                pass  # skip non-numeric cells (e.g. corrupted or text data)
 
     # Build a pool of all available 3-digit numbers
     available = list(set(range(100, 1000)) - used)
