@@ -145,6 +145,9 @@ def load_students(path, unsent_only=False):
 
         if not name and not email:
             continue
+        if not name:
+            print(f"  ⚠  Skipping row {row_num} — no name")
+            continue
         if not email:
             print(f"  ⚠  Skipping {name} — no email address")
             continue
@@ -213,7 +216,6 @@ def _send_one_email(s, template, index=None, total=None):
                     "filename": f"listok_{s['name'].replace(' ', '_')}.png",
                     "content": qr_b64,
                     "content_type": "image/png",
-                    "inline": True,
                     "content_id": qr_cid,
                 }
             ],
