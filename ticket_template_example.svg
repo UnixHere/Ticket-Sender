@@ -1,0 +1,135 @@
+<svg width="1200" height="600" viewBox="0 0 1200 600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Main ticket background -->
+  <rect width="800" height="600" fill="#ffffff" rx="16"/>
+  
+  <!-- QR code sidebar (extended black background) -->
+  <rect x="800" width="400" height="600" fill="#1a1a2e" rx="16"/>
+  
+  <!-- Top header section -->
+  <rect width="800" height="140" fill="#1a1a2e" rx="16"/>
+  <rect y="16" x="16" width="768" height="124" fill="#1a1a2e"/>
+  
+  <!-- "Vstupný lístok" label -->
+  <text x="400" y="45" font-family="Arial, sans-serif" font-size="14" fill="#e94560" 
+        text-anchor="middle" letter-spacing="3" font-weight="600">
+    VSTUPNÝ LÍSTOK
+  </text>
+  
+  <!-- Event name -->
+  <text x="400" y="95" font-family="Arial, sans-serif" font-size="42" fill="#ffffff" 
+        text-anchor="middle" font-weight="700">
+    ROZLÚČKA SO ŠKOLOU
+  </text>
+  
+  <!-- Decorative line -->
+  <line x1="80" y1="165" x2="720" y2="165" stroke="#e5e5e5" stroke-width="1"/>
+  
+  <!-- Event details section -->
+  <g>
+    <!-- Date -->
+    <text x="150" y="220" font-family="Arial, sans-serif" font-size="12" fill="#999" 
+          text-anchor="middle" letter-spacing="2">
+      DÁTUM
+    </text>
+    <text x="150" y="250" font-family="Arial, sans-serif" font-size="16" fill="#1a1a2e" 
+          text-anchor="middle" font-weight="600">
+      20. jún 2025
+    </text>
+    
+    <!-- Vertical divider -->
+    <line x1="267" y1="200" x2="267" y2="260" stroke="#e5e5e5" stroke-width="1"/>
+    
+    <!-- Time -->
+    <text x="400" y="220" font-family="Arial, sans-serif" font-size="12" fill="#999" 
+          text-anchor="middle" letter-spacing="2">
+      ČAS
+    </text>
+    <text x="400" y="250" font-family="Arial, sans-serif" font-size="16" fill="#1a1a2e" 
+          text-anchor="middle" font-weight="600">
+      18:00
+    </text>
+    
+    <!-- Vertical divider -->
+    <line x1="533" y1="200" x2="533" y2="260" stroke="#e5e5e5" stroke-width="1"/>
+    
+    <!-- Location -->
+    <text x="650" y="220" font-family="Arial, sans-serif" font-size="12" fill="#999" 
+          text-anchor="middle" letter-spacing="2">
+      MIESTO
+    </text>
+    <text x="650" y="250" font-family="Arial, sans-serif" font-size="16" fill="#1a1a2e" 
+          text-anchor="middle" font-weight="600">
+      Aula školy
+    </text>
+  </g>
+  
+  <!-- Decorative line -->
+  <line x1="80" y1="295" x2="720" y2="295" stroke="#e5e5e5" stroke-width="1"/>
+  
+  <!-- Student info section -->
+  <g>
+    <text x="80" y="340" font-family="Arial, sans-serif" font-size="12" fill="#999" 
+          letter-spacing="2">
+      DRŽITEĽ LÍSTKA
+    </text>
+    
+    <!-- NAME PLACEHOLDER - This will be replaced -->
+    <text x="80" y="385" font-family="Arial, sans-serif" font-size="32" fill="#1a1a2e" 
+          font-weight="700">
+      {NAME_PLACEHOLDER}
+    </text>
+    
+    <!-- Class badge -->
+    <rect x="80" y="410" width="120" height="36" fill="#f5f5f8" rx="8"/>
+    <text x="90" y="433" font-family="Arial, sans-serif" font-size="11" fill="#999" 
+          letter-spacing="1">
+      TRIEDA
+    </text>
+    <text x="145" y="433" font-family="Arial, sans-serif" font-size="14" fill="#1a1a2e" 
+          font-weight="600">
+      {CLASS_PLACEHOLDER}
+    </text>
+  </g>
+  
+  <!-- Decorative elements -->
+  <circle cx="80" cy="500" r="40" fill="none" stroke="#f0f0f5" stroke-width="2"/>
+  <circle cx="720" cy="500" r="40" fill="none" stroke="#f0f0f5" stroke-width="2"/>
+  
+  <!-- QR Code section -->
+  <g>
+    <!-- QR label -->
+    <text x="1000" y="80" font-family="Arial, sans-serif" font-size="14" fill="#e94560" 
+          text-anchor="middle" letter-spacing="2" font-weight="600">
+      VSTUPOVÝ KÓD
+    </text>
+    
+    <!-- QR code container with background -->
+    <rect x="850" y="120" width="300" height="300" fill="#f8f8fb" rx="12"/>
+    
+    <!-- QR CODE IMAGE - This will be replaced with actual QR -->
+    <image x="875" y="145" width="250" height="250" 
+           href="{QR_CODE_DATA}" preserveAspectRatio="xMidYMid meet"/>
+    
+    <!-- QR instruction -->
+    <text x="1000" y="460" font-family="Arial, sans-serif" font-size="13" fill="#ffffff" 
+          text-anchor="middle">
+      Ukáž pri vstupe
+    </text>
+    
+    <!-- Decorative icon -->
+    <g transform="translate(985, 480)">
+      <circle cx="15" cy="15" r="15" fill="rgba(233, 69, 96, 0.2)"/>
+      <path d="M15 8 L15 16 M11 12 L15 16 L19 12" stroke="#e94560" 
+            stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  
+  <!-- Footer decorative bar -->
+  <rect y="560" width="800" height="40" fill="#1a1a2e" rx="16"/>
+  <rect y="560" width="784" height="24" fill="#1a1a2e"/>
+  
+  <text x="400" y="585" font-family="Arial, sans-serif" font-size="11" fill="#555e7a" 
+        text-anchor="middle">
+    Tento lístok je osobný a neprenosný
+  </text>
+</svg>
