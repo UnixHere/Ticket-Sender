@@ -1,16 +1,9 @@
 # 🎟 Ticket Sender & Verifier
 
-A two-part system for sending personalised QR ticket emails and verifying them at the entrance.
+A two-part system for sending personalised QR ticket emails and checking students in at the entrance.
 
-Built with [Resend](https://resend.com) for reliable email delivery.
-
----
-
-## How it works
-
-1. Prepare an Excel file (`students_database.xlsx`) with columns: Name, Class, ID, Email
-2. Run **Ticket Sender** — generates a unique QR code for each student and emails them their ticket
-3. At the event, run **Ticket Verifier** — scan QR codes at the entrance to check students in
+- **Ticket Sender** (`main.py`) — reads your Excel spreadsheet, generates a unique QR code for each student, and sends them a personalised HTML ticket by email
+- **Ticket Verifier** (`webapp.py` + `index.html`) — a locally-hosted web app that scans QR codes at the entrance and marks students as arrived in the same spreadsheet
 
 ---
 
@@ -21,16 +14,31 @@ Ticket-Sender/
 ├── main.py                  # Ticket Sender — generates QR codes and sends emails
 ├── generate_ids.py          # Helper — fills empty ID cells in your Excel file
 ├── ticket_template.html     # HTML email template (edit to customise design)
-├── webapp.py                # Ticket Verifier — Flask backend for the scanner web app
-├── index.html               # Ticket Verifier — mobile-friendly scanner UI
-├── students_database.xlsx   # Your student data (not included, you create this)
-├── .env                     # Your secrets and event config (not committed)
-└── pyproject.toml           # Dependencies
+├── webapp.py                # Ticket Verifier — Flask backend
+├── index.html               # Ticket Verifier — mobile scanner UI
+├── students_database.xlsx   # Your student data (not included, create this yourself)
+├── .env                     # Secrets and event config (never commit this)
+└── pyproject.toml           # Python dependencies
 ```
 
 ---
 
-# 📤 Ticket Sender
+## Excel column layout
+
+Both tools share the same spreadsheet. Columns must be in this exact order:
+
+| Col | Header   | Description                                              |
+|-----|----------|----------------------------------------------------------|
+| A   | Name     | Student's full name                                      |
+| B   | Class    | Student's class (e.g. `4.A`)                             |
+| C   | ID       | Unique 3-digit number — use `generate_ids.py` if missing |
+| D   | Email    | Student's email address                                  |
+| E   | Sent     | Set to `1` by Ticket Sender after emailing               |
+| F   | Arrived  | Set to `1` by Ticket Verifier when scanned at entrance   |
+
+Columns E and F are created automatically on first run if missing.
+
+---
 
 ## Setup
 
@@ -43,7 +51,7 @@ uv sync
 
 Or with pip:
 ```bash
-pip install resend qrcode[pil] openpyxl pillow python-dotenv
+pip install resend "qrcode[pil]" openpyxl pillow python-dotenv flask flask-cors
 ```
 
 ### 2. Create your `.env` file
@@ -58,25 +66,30 @@ EVENT_TIME=18:00
 EVENT_LOCATION=Aula, School Name
 ```
 
-### 3. Prepare your Excel file
-
-Create `students_database.xlsx` with these columns:
-
-| A — Name | B — Class | C — ID | D — Email |
-|----------|-----------|--------|-----------|
-| Ján Novák | 4.A | 142 | jan@example.com |
-
-If you don't have IDs yet, run:
-```bash
-python generate_ids.py
-```
-This fills all empty ID cells with unique random 3-digit numbers (100–999).
+> Resend requires a verified sending domain. The free tier allows 3,000 emails/month.
 
 ---
 
-## Usage
+# 📤 Ticket Sender
 
-### Preview first (no emails sent)
+## 1. Prepare your spreadsheet
+
+Create `students_database.xlsx` with the column layout above. If students don't have IDs yet, run:
+
+```bash
+python generate_ids.py
+```
+
+This fills every empty cell in column C with a unique random 3-digit number (100–999). Existing IDs are never overwritten or duplicated. Supports up to 900 students.
+
+You can also pass a custom filename:
+```bash
+python generate_ids.py other_file.xlsx
+```
+
+---
+
+## 2. Preview tickets before sending
 
 Open `main.py` and set:
 ```python
@@ -88,9 +101,11 @@ Then run:
 python main.py
 ```
 
-This saves rendered HTML previews and QR images to `qr_preview/` so you can check everything looks right before sending.
+Preview mode does **not** send any emails. Instead it saves each student's rendered ticket as an HTML file and their QR code as a PNG into a `qr_preview/` folder. Open the HTML files in a browser to check the design before sending.
 
-### Send for real
+---
+
+## 3. Send tickets
 
 Set:
 ```python
@@ -102,52 +117,64 @@ Run:
 python main.py
 ```
 
-You'll be asked to type `YES` to confirm before anything is sent. Students who have already been sent a ticket (column E = 1) are automatically skipped.
+- Only students with column E **not** set to `1` are included — already-sent students are automatically skipped
+- You'll be asked to type `YES` to confirm before anything is sent
+- After each successful send, column E is updated to `1` in the spreadsheet
+- A 1.5 second delay is added between emails to avoid rate limits
+- Students with no email address or no name are skipped with a warning
+
+---
+
+## 4. Resend to one student
+
+To resend a ticket to a specific student regardless of their sent status:
+
+```bash
+python main.py resend 123
+python main.py resend "Jana Nováková"
+python main.py resend jana@example.com
+```
+
+- Searches by ID, full name, or email (case-insensitive)
+- Shows the matched student's details before sending
+- Asks for `YES` confirmation before sending
+- Does **not** update column E — resend is intentional and manual
+- If `MODE` is set to `preview`, it shows the match but does not send
 
 ---
 
 ## Customising the ticket design
 
-Edit `ticket_template.html` — it's a standard HTML file with these placeholders:
+Edit `ticket_template.html`. It's a standard HTML file with these placeholders:
 
-| Placeholder | Value |
-|-------------|-------|
-| `{name}` | Student's full name |
-| `{class_}` | Student's class |
-| `{id_}` | Student's ID number |
-| `{qr_cid}` | QR code image reference (keep as-is) |
-| `{EVENT_NAME}` | Event name from `.env` |
-| `{EVENT_DATE}` | Event date from `.env` |
-| `{EVENT_TIME}` | Event time from `.env` |
-| `{EVENT_LOCATION}` | Event location from `.env` |
-| `{SENDER_EMAIL}` | Sender email from `.env` |
-
----
-
-## Notes
-
-- Resend requires a verified sending domain — free tier allows 3,000 emails/month
-- Emails are sent with a 1.5 second delay between each to avoid rate limits
-- Students with a missing email address are skipped with a warning
-- Students with column E already set to `1` (Sent) are skipped to prevent duplicate emails
-- The QR code encodes: `Name | Class | ID`
+| Placeholder        | Value                      |
+|--------------------|----------------------------|
+| `{name}`           | Student's full name        |
+| `{class_}`         | Student's class            |
+| `{id_}`            | Student's ID number        |
+| `{qr_cid}`         | QR code image (keep as-is) |
+| `{EVENT_NAME}`     | From `.env`                |
+| `{EVENT_DATE}`     | From `.env`                |
+| `{EVENT_TIME}`     | From `.env`                |
+| `{EVENT_LOCATION}` | From `.env`                |
+| `{SENDER_EMAIL}`   | From `.env`                |
 
 ---
 
 # 📷 Ticket Verifier
 
-A locally-hosted mobile-friendly web app that scans QR codes at the entrance and checks them against `students_database.xlsx`.
+A mobile-friendly web app you run locally on a laptop at the entrance. Any phone on the same WiFi can open it and use it as a QR scanner.
 
 ## Features
 
 - 📷 **QR Scanner** — uses the phone camera to scan ticket QR codes
-- ✅ **Instant verification** — checks the QR against your Excel database
+- ✅ **Instant verification** — checks the scanned QR against the Excel database
 - ⚠️ **Duplicate detection** — warns if a ticket has already been scanned
-- ✋ **Check-in button** — marks a student as arrived directly in the Excel file (column F)
-- 🔍 **Manual lookup** — search by name, ID, class or email
-- 📋 **Attendees list** — full list with live arrived/pending stats
-- ↩ **Undo** — un-check someone if needed
-- 📱 **QR code for the app URL** — prints a scannable QR in the terminal on startup so you don't have to type the address manually
+- ✋ **Check-in button** — marks student as arrived in column F of the spreadsheet
+- ↩ **Undo** — un-check a student if they were checked in by mistake
+- 🔍 **Manual lookup** — search by name, ID, class, or email
+- 📋 **Attendees list** — full list with arrived/pending filters and live stats
+- 📱 **QR code for the app URL** — on startup, prints a scannable QR in the terminal so phones don't have to type the address manually
 
 ## Setup
 
@@ -162,9 +189,9 @@ Or with uv:
 uv add flask flask-cors openpyxl "qrcode[pil]"
 ```
 
-### 2. Copy your database
+### 2. Place your spreadsheet
 
-Put your `students_database.xlsx` in the same folder as `webapp.py`. Column F (`Arrived`) is created automatically on first run.
+Put `students_database.xlsx` in the same folder as `webapp.py`.
 
 ### 3. Run
 
@@ -172,31 +199,54 @@ Put your `students_database.xlsx` in the same folder as `webapp.py`. Column F (`
 python webapp.py
 ```
 
-The terminal will print your local IP, a scannable QR code, and a link to download the QR as an image:
+On startup the terminal will show your local IP, print a scannable QR code, and tell you where to download it as an image:
 
 ```
+=======================================================
+  🎟  Ticket Verifier
+=======================================================
+  ✓  Database: students_database.xlsx
+
+  Open in browser (same WiFi):
   → https://192.168.1.42:5000
+
+  Scan this QR code to open on any device:
+
+  █▀▀▀▀▀▀▀████ ...
+
   (Or visit https://192.168.1.42:5000/qr to download the QR as an image)
+=======================================================
 ```
 
-### 4. Open on phone
+### 4. Open on a phone
 
-Connect your phone to the **same WiFi** and either:
-- Scan the QR code printed in the terminal, or
-- Open `https://<your-ip>:5000` manually in the browser
+Connect the phone to the **same WiFi** and either scan the QR printed in the terminal or open the address manually in the browser.
 
-> On iPhone: Safari works best for camera access.  
-> On Android: Chrome works best.
+> iPhone: use Safari for camera access
+> Android: use Chrome for camera access
 
 ---
 
-## Excel columns
+## API endpoints
 
-| Col | Header  | Used by                                      |
-|-----|---------|----------------------------------------------|
-| A   | Name    | Both                                         |
-| B   | Class   | Both                                         |
-| C   | ID      | Both                                         |
-| D   | Email   | Ticket Sender                                |
-| E   | Sent    | Ticket Sender (skips already-sent students)  |
-| F   | Arrived | Ticket Verifier (added automatically)        |
+| Method | Endpoint            | Description                                                        |
+|--------|---------------------|--------------------------------------------------------------------|
+| `POST` | `/api/verify`       | Verify a QR string. Body: `{ "qr": "Name \| Class \| ID" }`       |
+| `POST` | `/api/mark_arrived` | Check in or undo. Body: `{ "row": 5, "arrived": true }`           |
+| `GET`  | `/api/stats`        | Returns `{ total, arrived, pending }`                             |
+| `GET`  | `/api/attendees`    | Returns the full student list                                      |
+| `GET`  | `/qr`               | Returns a PNG QR code image pointing to the app URL               |
+
+---
+
+## QR code format
+
+Both tools use the same format:
+
+```
+Name | Class | ID
+```
+
+For example: `Jana Nováková | 4.A | 142`
+
+The verifier matches on **ID** (exact) and does a soft name check — a mismatch shows a warning but does not reject the ticket.
