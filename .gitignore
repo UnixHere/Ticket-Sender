@@ -11,10 +11,13 @@ __pycache__/
 
 # QR preview output folder
 qr_preview/
-
+ticket_preview/
 # Excel temp files
 *.xlsx
 
 # OS junk
 .DS_Store
 Thumbs.db
+
+TEST.svg
+ticket_template.svg
