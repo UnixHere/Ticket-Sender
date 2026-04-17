@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ticket Verifier</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg:       #0a0a0f;
+    --surface:  #13131c;
+    --border:   #2a2a3d;
+    --accent:   #7c6af7;
+    --accent2:  #f7c56a;
+    --green:    #3dffa0;
+    --red:      #ff4d6d;
+    --orange:   #ff9f43;
+    --text:     #e8e8f0;
+    --muted:    #6b6b85;
+    --radius:   16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    padding: 18px 20px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo-icon {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .stats-pill {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    background: rgba(124,106,247,0.15);
+    border: 1px solid rgba(124,106,247,0.3);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .stats-pill:hover { background: rgba(124,106,247,0.25); }
+
+  /* ─── TABS ─── */
+  .tabs {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    flex: 1;
+    padding: 12px;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    letter-spacing: 0.03em;
+  }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ─── PAGES ─── */
+  .page { display: none; flex: 1; padding: 20px; flex-direction: column; gap: 16px; }
+  .page.active { display: flex; }
+
+  /* ─── SCANNER ─── */
+  .scanner-wrap {
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 2px solid var(--border);
+    position: relative;
+    background: #000;
+    aspect-ratio: 1;
+    max-height: 340px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #qr-reader {
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+    position: absolute !important;
+    top: 0; left: 0;
+  }
+  #qr-reader video { width: 100% !important; border-radius: 0 !important; }
+  #qr-reader img  { display: none !important; }
+
+  /* hide the ugly default HTML5QrCode UI chrome */
+  #qr-reader__scan_region { border: none !important; }
+  #qr-reader__scan_region * { display: none !important; }
+  #qr-reader__scan_region video { display: block !important; width: 100% !important; height: 100% !important; }
+  #qr-reader__dashboard { display: none !important; }
+
+  .scan-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10;
+  }
+  .scan-frame {
+    width: 60%; aspect-ratio: 1;
+    border: 2px solid var(--accent);
+    border-radius: 12px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+  @keyframes pulse-border {
+    0%,100% { border-color: var(--accent); box-shadow: 0 0 0 9999px rgba(0,0,0,0.35), 0 0 20px rgba(124,106,247,0.3); }
+    50%      { border-color: var(--accent2); box-shadow: 0 0 0 9999px rgba(0,0,0,0.35), 0 0 30px rgba(247,197,106,0.4); }
+  }
+
+  .scan-hint {
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: var(--radius);
+    border: none;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s;
+    letter-spacing: 0.02em;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #6857e8; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-outline {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ─── RESULT CARD ─── */
+  .result-card {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    overflow: hidden;
+    animation: slide-up 0.3s ease;
+  }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-header {
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .result-header.ok      { background: rgba(61,255,160,0.08); border-bottom: 1px solid rgba(61,255,160,0.15); }
+  .result-header.already { background: rgba(255,159,67,0.08);  border-bottom: 1px solid rgba(255,159,67,0.15); }
+  .result-header.bad     { background: rgba(255,77,109,0.08);  border-bottom: 1px solid rgba(255,77,109,0.15); }
+
+  .result-icon { font-size: 1.8rem; line-height: 1; }
+  .result-title { font-size: 1rem; font-weight: 800; }
+  .result-sub   { font-size: 0.78rem; color: var(--muted); margin-top: 2px; font-family: 'Space Mono', monospace; }
+  .result-title.ok      { color: var(--green); }
+  .result-title.already { color: var(--orange); }
+  .result-title.bad     { color: var(--red); }
+
+  .result-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.88rem;
+  }
+  .info-label { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 0.75rem; }
+  .info-value { font-weight: 600; text-align: right; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+  }
+  .badge-green  { background: rgba(61,255,160,0.15); color: var(--green); }
+  .badge-red    { background: rgba(255,77,109,0.15);  color: var(--red); }
+  .badge-orange { background: rgba(255,159,67,0.15);  color: var(--orange); }
+
+  .result-actions { padding: 0 18px 16px; display: flex; gap: 8px; flex-direction: column; }
+
+  .btn-arrived {
+    background: var(--green);
+    color: #0a0a0f;
+    font-weight: 800;
+  }
+  .btn-arrived:hover { background: #2de891; }
+
+  .btn-undo {
+    background: rgba(255,159,67,0.15);
+    color: var(--orange);
+    border: 1px solid rgba(255,159,67,0.3);
+    width: 100%;
+    padding: 12px;
+    border-radius: var(--radius);
+    border: 1px solid;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .btn-undo:hover { background: rgba(255,159,67,0.25); }
+
+  .divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+  /* ─── MANUAL LOOKUP ─── */
+  .search-wrap { position: relative; }
+  .search-wrap input {
+    width: 100%;
+    padding: 13px 16px 13px 42px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap input::placeholder { color: var(--muted); }
+  .search-icon {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 1rem; pointer-events: none;
+  }
+
+  /* ─── ATTENDEES LIST ─── */
+  .attendee-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .attendee-item:last-child { border-bottom: none; }
+  .attendee-avatar {
+    width: 36px; height: 36px; min-width: 36px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800;
+    font-size: 0.85rem;
+  }
+  .avatar-arrived { background: rgba(61,255,160,0.15); color: var(--green); }
+  .avatar-pending { background: rgba(124,106,247,0.15); color: var(--accent); }
+  .attendee-info { flex: 1; min-width: 0; }
+  .attendee-name  { font-size: 0.88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .attendee-meta  { font-size: 0.72rem; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 2px; }
+  .attendee-status { flex-shrink: 0; }
+
+  /* ─── STATS SECTION ─── */
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .stat-num  { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+  .stat-label { font-size: 0.7rem; color: var(--muted); margin-top: 4px; font-family: 'Space Mono', monospace; }
+  .stat-num.green  { color: var(--green); }
+  .stat-num.purple { color: var(--accent); }
+  .stat-num.muted  { color: var(--muted); }
+
+  /* ─── EMPTY / LOADING ─── */
+  .empty { text-align: center; color: var(--muted); padding: 32px 0; font-size: 0.85rem; }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─── TOAST ─── */
+  #toast {
+    position: fixed;
+    bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 18px;
+    font-size: 0.82rem;
+    font-family: 'Space Mono', monospace;
+    pointer-events: none;
+    transition: transform 0.3s ease, opacity 0.3s;
+    opacity: 0;
+    z-index: 9999;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* ─── SCROLL ─── */
+  .scroll-area { overflow-y: auto; flex: 1; }
+  .section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* Filter row */
+  .filter-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .filter-btn {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(124,106,247,0.1); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🎟</div>
+    Ticket Verifier
+  </div>
+  <div class="stats-pill" id="header-stats" onclick="switchTab('list')">— / —</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('scan')" id="tab-scan">📷 Scan</div>
+  <div class="tab"        onclick="switchTab('lookup')" id="tab-lookup">🔍 Lookup</div>
+  <div class="tab"        onclick="switchTab('list')" id="tab-list">📋 List</div>
+</div>
+
+<!-- ════════════════════ SCAN PAGE ════════════════════ -->
+<div class="page active" id="page-scan">
+  <div class="scanner-wrap">
+    <div id="qr-reader"></div>
+    <div class="scan-overlay"><div class="scan-frame"></div></div>
+  </div>
+  <p class="scan-hint">Point camera at a ticket QR code</p>
+
+  <div id="scan-result"></div>
+
+  <button class="btn btn-outline" id="btn-scan-again" style="display:none" onclick="resumeScanner()">
+    Scan next ticket →
+  </button>
+</div>
+
+<!-- ════════════════════ LOOKUP PAGE ════════════════════ -->
+<div class="page" id="page-lookup">
+  <div class="section-title">Manual lookup</div>
+  <div class="search-wrap">
+    <span class="search-icon">🔎</span>
+    <input type="text" id="lookup-input" placeholder="Name, ID or email…" oninput="onLookupInput()">
+  </div>
+  <div id="lookup-result"></div>
+</div>
+
+<!-- ════════════════════ LIST PAGE ════════════════════ -->
+<div class="page" id="page-list">
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-box"><div class="stat-num purple" id="s-total">–</div><div class="stat-label">Total</div></div>
+    <div class="stat-box"><div class="stat-num green"  id="s-arrived">–</div><div class="stat-label">Arrived</div></div>
+    <div class="stat-box"><div class="stat-num muted"  id="s-pending">–</div><div class="stat-label">Pending</div></div>
+  </div>
+
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setFilter('arrived',this)">Arrived</button>
+    <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
+  </div>
+
+  <div class="scroll-area" id="attendee-list">
+    <div class="empty"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════ STATE ════════════════════
+let scanner      = null;
+let scanning     = true;
+let lastResult   = null;
+let attendees    = [];
+let currentFilter = 'all';
+let lookupTimer  = null;
+
+// ════════════════════ TABS ════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + tab).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+
+  if (tab === 'scan')   { if (!scanner) initScanner(); else if (scanning) {} }
+  if (tab === 'list')   { loadAttendees(); }
+  if (tab === 'lookup') { setTimeout(() => document.getElementById('lookup-input').focus(), 100); }
+}
+
+// ════════════════════ SCANNER ════════════════════
+function initScanner() {
+  scanner = new Html5Qrcode("qr-reader");
+
+  const config = {
+    fps: 12,
+    rememberLastUsedCamera: true,
+  };
+
+  scanner.start(
+    { facingMode: { exact: "environment" } },
+    config,
+    onScanSuccess
+  ).catch(() => {
+    // fallback to any camera (front or default)
+    scanner.start({ facingMode: "user" }, config, onScanSuccess)
+      .catch(() => showToast("⚠ Camera unavailable"));
+  });
+}
+
+async function onScanSuccess(decodedText) {
+  if (!scanning) return;
+  scanning = false;
+  scanner.pause(true);
+
+  document.getElementById('btn-scan-again').style.display = 'none';
+  document.getElementById('scan-result').innerHTML =
+    '<div class="empty"><div class="spinner"></div></div>';
+
+  try {
+    const res = await fetch('/api/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qr: decodedText }),
+    });
+    const data = await res.json();
+    renderScanResult(data);
+  } catch {
+    document.getElementById('scan-result').innerHTML =
+      '<div class="empty">Server error — is the backend running?</div>';
+  }
+
+  document.getElementById('btn-scan-again').style.display = 'block';
+}
+
+function resumeScanner() {
+  scanning = true;
+  lastResult = null;
+  document.getElementById('scan-result').innerHTML = '';
+  document.getElementById('btn-scan-again').style.display = 'none';
+  if (scanner) scanner.resume();
+}
+
+// ════════════════════ RENDER RESULT ════════════════════
+function renderScanResult(data, container = 'scan-result') {
+  const el = document.getElementById(container);
+  lastResult = data;
+
+  if (data.error) {
+    el.innerHTML = resultCard('bad', '⚠', 'Server Error', data.error, '', []);
+    return;
+  }
+
+  if (!data.valid) {
+    const reason = data.reason === 'not_found'
+      ? `ID <strong>${data.qr_id}</strong> not found in database`
+      : 'QR code format not recognised';
+
+    el.innerHTML = resultCard('bad', '✗', 'Invalid Ticket', reason,
+      `Raw: ${data.raw || [data.qr_name, data.qr_class, data.qr_id].filter(Boolean).join(' | ')}`, []);
+    return;
+  }
+
+  const t = data.ticket;
+
+  if (data.arrived) {
+    const body = infoRows(t) + (data.name_ok ? '' : nameMismatch(data));
+    const actions = `
+      <button class="btn-undo" onclick="markArrived(${data.row}, false)">↩ Undo check-in</button>`;
+    el.innerHTML = resultCard('already', '⟳', 'Already Checked In',
+      'This ticket was already scanned.', '', [body], actions);
+    return;
+  }
+
+  const body    = infoRows(t) + (data.name_ok ? '' : nameMismatch(data));
+  const actions = `
+    <button class="btn btn-arrived" onclick="markArrived(${data.row}, true)">✓ Check in</button>`;
+  el.innerHTML = resultCard('ok', '✓', 'Valid Ticket', 'Ticket found in database.', '', [body], actions);
+}
+
+function resultCard(type, icon, title, subtitle, detail, bodies, actions = '') {
+  return `
+  <div class="result-card">
+    <div class="result-header ${type}">
+      <div class="result-icon">${icon}</div>
+      <div>
+        <div class="result-title ${type}">${title}</div>
+        <div class="result-sub">${subtitle}${detail ? ' · ' + detail : ''}</div>
+      </div>
+    </div>
+    ${bodies.length ? '<div class="result-body">' + bodies.join('<div class="divider"></div>') + '</div>' : ''}
+    ${actions ? '<div class="result-actions">' + actions + '</div>' : ''}
+  </div>`;
+}
+
+function infoRows(t) {
+  return `
+    <div class="info-row"><span class="info-label">Name</span><span class="info-value">${t.name}</span></div>
+    <div class="info-row"><span class="info-label">Class</span><span class="info-value">${t.class_}</span></div>
+    <div class="info-row"><span class="info-label">ID</span><span class="info-value">
+      <span class="badge badge-green">#${t.id}</span></span></div>`;
+}
+
+function nameMismatch(data) {
+  return `
+    <div class="info-row" style="background:rgba(255,159,67,0.05);border-radius:8px;padding:8px;">
+      <span class="info-label">⚠ Name mismatch</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">QR says</span>
+      <span class="info-value"><span class="badge badge-orange">${data.qr.name}</span></span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">DB has</span>
+      <span class="info-value"><span class="badge badge-green">${data.ticket.name}</span></span>
+    </div>`;
+}
+
+// ════════════════════ CHECK IN / UNDO ════════════════════
+async function markArrived(row, arrived) {
+  try {
+    await fetch('/api/mark_arrived', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ row, arrived }),
+    });
+
+    showToast(arrived ? '✓ Checked in!' : '↩ Check-in undone');
+
+    // refresh whichever view is showing the result
+    if (lastResult) {
+      lastResult.arrived = arrived;
+      const activeContainer = document.getElementById('page-scan').classList.contains('active')
+        ? 'scan-result' : 'lookup-result';
+      renderScanResult(lastResult, activeContainer);
+    }
+
+    refreshStats();
+  } catch {
+    showToast('⚠ Failed to update DB');
+  }
+}
+
+// ════════════════════ LOOKUP ════════════════════
+function onLookupInput() {
+  clearTimeout(lookupTimer);
+  const q = document.getElementById('lookup-input').value.trim();
+  if (!q) { document.getElementById('lookup-result').innerHTML = ''; return; }
+  lookupTimer = setTimeout(() => doLookup(q), 320);
+}
+
+async function doLookup(q) {
+  const el = document.getElementById('lookup-result');
+  el.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+
+  // Build a fake QR string if it looks like an ID (all digits)
+  const isId = /^\d+$/.test(q);
+  const qrString = isId ? `_ | _ | ${q}` : `${q} | _ | 0`;
+
+  // For lookup, we search the attendees list directly
+  if (!attendees.length) {
+    const res = await fetch('/api/attendees');
+    attendees = await res.json();
+  }
+
+  const needle = q.toLowerCase();
+  const matches = attendees.filter(s =>
+    s.name.toLowerCase().includes(needle) ||
+    s.id.toLowerCase().includes(needle) ||
+    s.email.toLowerCase().includes(needle) ||
+    s.class_.toLowerCase().includes(needle)
+  );
+
+  if (!matches.length) {
+    el.innerHTML = '<div class="empty">No results for "' + q + '"</div>';
+    return;
+  }
+
+  el.innerHTML = matches.map(s => {
+    const arrivedBadge = s.arrived
+      ? '<span class="badge badge-green">✓ arrived</span>'
+      : '<span class="badge badge-red">◌ pending</span>';
+
+    const actionBtn = s.arrived
+      ? `<button class="btn-undo" style="margin-top:8px" onclick="quickToggle(${s.row},false,this)">↩ Undo</button>`
+      : `<button class="btn btn-arrived" style="margin-top:8px" onclick="quickToggle(${s.row},true,this)">✓ Check in</button>`;
+
+    return `
+      <div class="result-card" style="margin-bottom:10px">
+        <div class="result-body">
+          <div class="info-row"><span class="info-label">Name</span><span class="info-value">${s.name}</span></div>
+          <div class="info-row"><span class="info-label">Class</span><span class="info-value">${s.class_}</span></div>
+          <div class="info-row"><span class="info-label">ID</span><span class="info-value"><span class="badge badge-green">#${s.id}</span></span></div>
+          <div class="info-row"><span class="info-label">Status</span><span class="info-value">${arrivedBadge}</span></div>
+        </div>
+        <div class="result-actions">${actionBtn}</div>
+      </div>`;
+  }).join('');
+}
+
+async function quickToggle(row, arrived, btn) {
+  btn.disabled = true;
+  await markArrived(row, arrived);
+  // Re-run lookup to refresh
+  const q = document.getElementById('lookup-input').value.trim();
+  attendees = []; // force refresh
+  if (q) doLookup(q);
+}
+
+// ════════════════════ ATTENDEES LIST ════════════════════
+let filterMode = 'all';
+
+function setFilter(f, btn) {
+  filterMode = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderList();
+}
+
+async function loadAttendees() {
+  document.getElementById('attendee-list').innerHTML =
+    '<div class="empty"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch('/api/attendees');
+    attendees = await res.json();
+    refreshStats();
+    renderList();
+  } catch {
+    document.getElementById('attendee-list').innerHTML =
+      '<div class="empty">Cannot reach server</div>';
+  }
+}
+
+function renderList() {
+  let list = attendees;
+  if (filterMode === 'arrived') list = list.filter(s => s.arrived);
+  if (filterMode === 'pending') list = list.filter(s => !s.arrived);
+
+  if (!list.length) {
+    document.getElementById('attendee-list').innerHTML =
+      '<div class="empty">No attendees match this filter.</div>';
+    return;
+  }
+
+  document.getElementById('attendee-list').innerHTML = list.map(s => {
+    const initials = s.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+    const avatarClass = s.arrived ? 'avatar-arrived' : 'avatar-pending';
+    const badge = s.arrived
+      ? '<span class="badge badge-green">✓</span>'
+      : '<span class="badge badge-red">–</span>';
+    return `
+      <div class="attendee-item">
+        <div class="attendee-avatar ${avatarClass}">${initials}</div>
+        <div class="attendee-info">
+          <div class="attendee-name">${s.name}</div>
+          <div class="attendee-meta">${s.class_} · #${s.id}</div>
+        </div>
+        <div class="attendee-status">${badge}</div>
+      </div>`;
+  }).join('');
+}
+
+// ════════════════════ STATS ════════════════════
+async function refreshStats() {
+  try {
+    const res = await fetch('/api/stats');
+    const d   = await res.json();
+    document.getElementById('s-total').textContent   = d.total;
+    document.getElementById('s-arrived').textContent = d.arrived;
+    document.getElementById('s-pending').textContent = d.pending;
+    document.getElementById('header-stats').textContent =
+      `${d.arrived} / ${d.total}`;
+  } catch {}
+}
+
+// ════════════════════ TOAST ════════════════════
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ════════════════════ BOOT ════════════════════
+refreshStats();
+initScanner();
+</script>
+</body>
+</html>
