@@ -19,9 +19,13 @@ Run:
 Then open  http://<your-local-ip>:5000  on any device on the same WiFi.
 """
 
+import io
 import os
+import socket
 import openpyxl
-from flask import Flask, jsonify, request, render_template, send_from_directory
+import qrcode
+import qrcode.image.svg
+from flask import Flask, jsonify, request, render_template, send_from_directory, send_file, Response
 from flask_cors import CORS
 import socket
 import qrcode
@@ -42,6 +46,40 @@ COL_ARRIVED = 6   # F  ← new column managed by this app
 
 HEADER_ROW  = 1
 # ────────────────────────────────────────────────────────────────────────────
+
+
+def _get_local_ip() -> str:
+    """Return the machine's LAN IP address (falls back to localhost)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def _server_url() -> str:
+    return f"https://{_get_local_ip()}:5000"
+
+
+def _generate_qr_png(url: str) -> bytes:
+    """Return a PNG QR code for *url* as raw bytes."""
+    img = qrcode.make(url)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf.read()
+
+
+def _print_qr_terminal(url: str):
+    """Print a small ASCII/Unicode QR code to stdout."""
+    qr = qrcode.QRCode(border=1)
+    qr.add_data(url)
+    qr.make(fit=True)
+    qr.print_ascii(invert=True)
+
 
 
 def _ensure_arrived_header():
@@ -222,6 +260,14 @@ def attendees():
     return jsonify(students)
 
 
+@app.route("/qr")
+def qr_code():
+    """Serve a PNG QR code that points to this server's root URL."""
+    url = _server_url()
+    png_bytes = _generate_qr_png(url)
+    return Response(png_bytes, mimetype="image/png")
+
+
 if __name__ == "__main__":
     print("=" * 55)
     print("  🎟  Ticket Verifier")
@@ -232,20 +278,15 @@ if __name__ == "__main__":
     else:
         print(f"  ✓  Database: {EXCEL_FILE}")
     print()
-    print("  Open in browser (same WiFi):")
-    import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        print(f"  → https://{ip}:5000")
-        print()
-        qr = qrcode.QRCode(border=1)
-        qr.add_data(f"https://{ip}:5000")
-        qr.make(fit=True)
-        qr.print_ascii(invert=True)
-    except Exception:
-        print("  → http://localhost:5000")
+
+    url = _server_url()
+    print(f"  Open in browser (same WiFi):")
+    print(f"  → {url}")
+    print()
+    print("  Scan this QR code to open on any device:")
+    print()
+    _print_qr_terminal(url)
+    print()
+    print(f"  (Or visit {url}/qr to download the QR as an image)")
     print("=" * 55)
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True, ssl_context=("cert.pem", "key.pem"))
