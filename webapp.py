@@ -23,6 +23,9 @@ import os
 import openpyxl
 from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_cors import CORS
+import socket
+import qrcode
+socket.setdefaulttimeout(5)
 
 app = Flask(__name__)
 CORS(app)
@@ -236,8 +239,13 @@ if __name__ == "__main__":
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-        print(f"  → http://{ip}:5000")
+        print(f"  → https://{ip}:5000")
+        print()
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(f"https://{ip}:5000")
+        qr.make(fit=True)
+        qr.print_ascii(invert=True)
     except Exception:
         print("  → http://localhost:5000")
     print("=" * 55)
-    app.run(host="0.0.0.0", port=5000, debug=False, ssl_context="adhoc")
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True, ssl_context=("cert.pem", "key.pem"))
