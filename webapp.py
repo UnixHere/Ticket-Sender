@@ -27,6 +27,9 @@ import qrcode
 import qrcode.image.svg
 from flask import Flask, jsonify, request, render_template, send_from_directory, send_file, Response
 from flask_cors import CORS
+import socket
+import qrcode
+socket.setdefaulttimeout(5)
 
 app = Flask(__name__)
 CORS(app)
@@ -286,4 +289,4 @@ if __name__ == "__main__":
     print()
     print(f"  (Or visit {url}/qr to download the QR as an image)")
     print("=" * 55)
-    app.run(host="0.0.0.0", port=5000, debug=False, ssl_context="adhoc")
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True, ssl_context=("cert.pem", "key.pem"))

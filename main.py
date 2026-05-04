@@ -65,7 +65,7 @@ SEND_DELAY_SECONDS = 1.5
 
 # "preview" = save QR images + print to console, no emails sent
 # "real"    = actually send emails
-MODE = "real"
+MODE = "preview"
 
 # ================================================================
 

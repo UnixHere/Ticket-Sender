@@ -466,8 +466,10 @@ function initScanner() {
   scanner = new Html5Qrcode("qr-reader");
 
   const config = {
-    fps: 12,
+    fps: 15,
+    qrbox: { width: 250, height: 250 },
     rememberLastUsedCamera: true,
+    aspectRatio: 1.0,
   };
 
   scanner.start(

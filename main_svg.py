@@ -56,6 +56,9 @@ COL_CLASS          = 2   # B
 COL_ID             = 3   # C
 COL_EMAIL          = 4   # D
 COL_SENT           = 5   # E  — 1 = sent, 0/empty = not sent
+COL_ARRIVED        = 6   # F
+COL_PRICE          = 7   # G
+COL_PAID           = 8   # H
 
 HEADER_ROW         = 1
 
@@ -74,7 +77,7 @@ EVENT_DURATION_MINUTES = int(os.getenv("EVENT_DURATION_MINUTES", "120"))
 
 # "preview" = save ticket files + print to console, no emails sent
 # "real"    = actually send emails
-MODE = "preview"
+MODE = "preview" 
 
 # Shift ALL text elements up (negative) or down (positive) in the PDF output.
 # SVGs look fine but Playwright's print renderer can push text down slightly.
@@ -392,7 +395,7 @@ def make_ics(name, id_):
 
 def load_students(path, unsent_only=False):
     wb = openpyxl.load_workbook(path)
-    ws = wb.active
+    ws = wb["StudentsReformated"]
 
     if ws.cell(row=HEADER_ROW, column=COL_SENT).value is None:
         ws.cell(row=HEADER_ROW, column=COL_SENT).value = "Sent"
@@ -405,6 +408,7 @@ def load_students(path, unsent_only=False):
         id_    = row[COL_ID    - 1].value
         email  = row[COL_EMAIL - 1].value
         sent   = row[COL_SENT  - 1].value
+        paid   = row[COL_PAID  - 1].value
         row_num = row[0].row
 
         if not name and not email:
@@ -417,8 +421,10 @@ def load_students(path, unsent_only=False):
             continue
 
         already_sent = (str(sent).strip() == "1") if sent is not None else False
-
-        if unsent_only and already_sent:
+        has_paid     = (str(paid).strip() == "1") if paid is not None else False
+        
+        
+        if unsent_only and (already_sent or not has_paid):
             continue
 
         students.append({
@@ -427,6 +433,7 @@ def load_students(path, unsent_only=False):
             "id":           str(id_).strip(),
             "email":        str(email).strip(),
             "already_sent": already_sent,
+            "has_paid":     has_paid,
             "row_number":   row_num,
         })
 
@@ -659,13 +666,37 @@ def adjustpdf_mode():
     print(f"  • Text too LOW  → set TEXT_Y_OFFSET to a more negative number (e.g. -10, -15)")
     print(f"  • Text too HIGH → set TEXT_Y_OFFSET to a more positive number (e.g. +5)")
     print(f"  • Looks good    → leave TEXT_Y_OFFSET = {TEXT_Y_OFFSET} and run normally\n")
+def dryrun_mode():
+    """
+    Vypíše zoznam študentov, ktorým BY SA odoslal email
+    (zaplatili + ešte nedostali lístok). Nič neposiela.
 
+    Usage:  python main_svg.py dryrun
+    """
+    print("\n── DRY RUN — iba výpis, žiadne emaily sa neodošlú ──\n")
+
+    students = load_students(EXCEL_FILE, unsent_only=True)
+
+    if not students:
+        print("  Nikомu sa neplánuje odoslať email.")
+        print("  (Buď všetci zaplatili a dostali lístok, alebo nikto ešte nezaplatil.)\n")
+        return
+
+    print(f"  Plánuje sa odoslať {len(students)} email(ov):\n")
+    print(f"  {'#':<4} {'Meno':<25} {'Trieda':<10} {'ID':<10} {'Email'}")
+    print(f"  {'─'*4} {'─'*25} {'─'*10} {'─'*10} {'─'*30}")
+    for i, s in enumerate(students, 1):
+        print(f"  {i:<4} {s['name']:<25} {s['class_']:<10} {s['id']:<10} {s['email']}")
+
+    print(f"\n  Spusti bez argumentov pre skutočné odosielanie.\n")
 
 def main():
     if len(sys.argv) >= 2 and sys.argv[1].lower() == "adjustpdf":
         adjustpdf_mode()
         return
-
+    if len(sys.argv) >= 2 and sys.argv[1].lower() == "dryrun":
+        dryrun_mode()
+        return
     if len(sys.argv) >= 3 and sys.argv[1].lower() == "resend":
         identifier = " ".join(sys.argv[2:])
         resend_one(identifier)
